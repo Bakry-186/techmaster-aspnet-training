@@ -10,6 +10,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddScoped<ITemperatureConverter, TemperatureConverter>();
+builder.Services.AddSingleton<INoteStore, NoteStore>();
 
 var app = builder.Build();
 
