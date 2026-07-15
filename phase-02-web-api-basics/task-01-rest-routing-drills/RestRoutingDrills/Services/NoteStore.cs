@@ -19,9 +19,14 @@ public class NoteStore : INoteStore
         return _notes.FirstOrDefault(n => n.Id == id);
     }
 
-    public List<Note> GetAllNotes()
+    public List<Note> GetAllNotes(int pageNumber, int pageSize)
     {
-        return _notes;
+        return _notes.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
+    }
+
+    public List<Note> GetAllNotesByKeyword(string keyword)
+    {
+        return _notes.Where(n => n.Title.Contains(keyword ?? "", StringComparison.OrdinalIgnoreCase) || n.Content.Contains(keyword ?? "", StringComparison.OrdinalIgnoreCase)).ToList();
     }
 
     public Note? UpdateNote(int id, UpdateNoteDto updateNoteDto)

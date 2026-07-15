@@ -8,6 +8,34 @@ namespace RestRoutingDrills.Controllers;
 [Route("api/[controller]")]
 public class NotesController(INoteStore noteStore) : ControllerBase
 {
+    [HttpGet("search")]
+    public IActionResult GetAllNotesByKeyword([FromQuery] string keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword))
+        {
+            return BadRequest(new { error = "Keyword is required" });
+        }
+
+        var notes = noteStore.GetAllNotesByKeyword(keyword);
+        return Ok(notes);
+    }
+
+    [HttpGet]
+    public IActionResult GetAllNotes([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+    {
+        if (pageNumber < 1)
+        {
+            return BadRequest(new { error = "Page number must be greater than 0" });
+        }
+        if (pageSize < 1 || pageSize > 50)
+        {
+            return BadRequest(new { error = "Page size must be greater than 0 and less than 50" });
+        }
+
+        var notes = noteStore.GetAllNotes(pageNumber, pageSize);
+        return Ok(notes);
+    }
+
     [HttpGet("{id}")]
     public IActionResult GetNoteById(int id)
     {
@@ -16,14 +44,8 @@ public class NotesController(INoteStore noteStore) : ControllerBase
         {
             return NotFound(new { error = "Note not found" });
         }
-        return Ok(note);
-    }
 
-    [HttpGet]
-    public IActionResult GetAllNotes()
-    {
-        var notes = noteStore.GetAllNotes();
-        return Ok(notes);
+        return Ok(note);
     }
 
     [HttpPost]
@@ -41,6 +63,7 @@ public class NotesController(INoteStore noteStore) : ControllerBase
         {
             return NotFound(new { error = "Note not found" });
         }
+
         return Ok(note);
     }
 
