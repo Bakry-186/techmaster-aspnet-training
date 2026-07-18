@@ -1,0 +1,120 @@
+{
+  "info": {
+    "name": "TechMaster ASP.NET Phase 02",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5254" }
+  ],
+  "item": [
+    {
+      "name": "Students",
+      "item": [
+        {
+          "name": "Get All Students",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/students?pageNumber=1&pageSize=10" }
+        },
+        {
+          "name": "Create Student",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Student\",\n  \"email\": \"test.student@techmaster.dev\",\n  \"phone\": \"01000000099\",\n  \"trackName\": \"ASP.NET Backend\"\n}"
+            },
+            "url": "{{baseUrl}}/api/students"
+          }
+        },
+        {
+          "name": "Get Student By Id",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/students/1" }
+        },
+        {
+          "name": "Student Not Found",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/students/999" }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "Get All Products",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/products?pageNumber=1&pageSize=10" }
+        },
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tablet\",\n  \"description\": \"Android tablet\",\n  \"price\": 5000,\n  \"stock\": 6,\n  \"categoryId\": 1\n}"
+            },
+            "url": "{{baseUrl}}/api/products"
+          }
+        },
+        {
+          "name": "Patch Stock",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"stock\": 3\n}" },
+            "url": "{{baseUrl}}/api/products/1/stock"
+          }
+        },
+        {
+          "name": "Low Stock Report",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/products/low-stock" }
+        }
+      ]
+    },
+    {
+      "name": "Book Store",
+      "item": [
+        {
+          "name": "Get Books",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/books?pageNumber=1&pageSize=10" }
+        },
+        {
+          "name": "Create Book",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"API Design Patterns\",\n  \"isbn\": \"978-1000000002\",\n  \"price\": 390,\n  \"stock\": 7,\n  \"authorId\": 1,\n  \"categoryId\": 1,\n  \"publishedDate\": \"2025-01-01T00:00:00Z\"\n}"
+            },
+            "url": "{{baseUrl}}/api/books"
+          }
+        },
+        {
+          "name": "Summary Report",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/books/reports/summary" }
+        }
+      ]
+    },
+    {
+      "name": "Error Cases",
+      "item": [
+        {
+          "name": "400 Bad Request Demo",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/errors/demo" }
+        },
+        {
+          "name": "404 Not Found Demo",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/errors/not-found" }
+        },
+        {
+          "name": "Request Info Header",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-Client-Name", "value": "postman" }],
+            "url": "{{baseUrl}}/api/request-info"
+          }
+        }
+      ]
+    }
+  ]
+}
