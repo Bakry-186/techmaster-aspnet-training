@@ -3,7 +3,7 @@
 ## Student Information
     - Name: Abdelrahman Abdelhamid Mostafa
     - Track: ASP.NET Backend Career Training
-    - Phase: Phase 02 - Web API Basics
+    - Phase: Phase 03 - Real Backend Data Systems
     
 ## Training Repository 
 This repository contains my work during the TechMaster ASP.NET Backend Career Training. 
@@ -11,7 +11,7 @@ This repository contains my work during the TechMaster ASP.NET Backend Career Tr
 ## Phase Folders
     - phase-01-backend-foundations
     - phase-02-web-api-basics
-    - phase-03-database-and-ef-core
+    - phase-03-real-backend-data-systems
     - phase-04-auth-and-architecture
     - final-capstone 
     
