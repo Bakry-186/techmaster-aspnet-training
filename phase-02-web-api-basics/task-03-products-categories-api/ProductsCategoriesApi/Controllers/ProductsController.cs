@@ -45,9 +45,15 @@ public class ProductsController(IProductService productService) : ControllerBase
         int pageNumber = 1,
         int pageSize = 10)
     {
-        if (pageNumber < 1 || pageSize < 1)
+        if (pageNumber < 1 || pageSize < 1 || pageSize > 50)
         {
-            return BadRequest(Error("Invalid request", "BAD_REQUEST", "Page number and page size must be greater than 0."));
+            return BadRequest(Error("Invalid request", "BAD_REQUEST",
+                "Page number must be at least 1 and page size must be between 1 and 50."));
+        }
+
+        if (minPrice.HasValue && maxPrice.HasValue && minPrice > maxPrice)
+        {
+            return BadRequest(Error("Invalid request", "BAD_REQUEST", "minPrice cannot be greater than maxPrice."));
         }
 
         var products = await productService.GetProducts(search, categoryId, minPrice, maxPrice, isAvailable, lowStock, pageNumber, pageSize);

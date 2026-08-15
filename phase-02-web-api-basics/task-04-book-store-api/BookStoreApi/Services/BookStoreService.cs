@@ -33,21 +33,17 @@ public class BookStoreService : IBookStoreService
         return Task.FromResult<Author?>(author);
     }
 
-    public Task<bool> DeleteAuthor(int id)
+    public Task<(bool Success, string? ErrorCode)> DeleteAuthor(int id)
     {
-        if (_books.Any(b => b.AuthorId == id))
-        {
-            return Task.FromResult(false);
-        }
-
         var author = _authors.FirstOrDefault(a => a.Id == id);
         if (author == null)
-        {
-            return Task.FromResult(false);
-        }
+            return Task.FromResult<(bool Success, string? ErrorCode)>((false, "NOT_FOUND"));
+
+        if (_books.Any(b => b.AuthorId == id))
+            return Task.FromResult<(bool Success, string? ErrorCode)>((false, "CONFLICT"));
 
         _authors.Remove(author);
-        return Task.FromResult(true);
+        return Task.FromResult<(bool Success, string? ErrorCode)>((true, null));
     }
 
     public Task<IReadOnlyList<Category>> GetCategories() =>
@@ -65,7 +61,7 @@ public class BookStoreService : IBookStoreService
         return Task.FromResult<Category?>(category);
     }
 
-    public Task<PagedBooksResponse> GetBooks(string? search, int? authorId, int? categoryId, int pageNumber, int pageSize)
+    public Task<PagedBooksResponse> GetBooks(string? search, int? authorId, int? categoryId, bool? isAvailable, int pageNumber, int pageSize)
     {
         var query = _books.AsEnumerable();
 
@@ -84,6 +80,11 @@ public class BookStoreService : IBookStoreService
         if (categoryId.HasValue)
         {
             query = query.Where(b => b.CategoryId == categoryId.Value);
+        }
+
+        if (isAvailable.HasValue)
+        {
+            query = query.Where(b => isAvailable.Value ? b.Stock > 0 : b.Stock == 0);
         }
 
         var filtered = query.ToList();
@@ -105,7 +106,7 @@ public class BookStoreService : IBookStoreService
 
     public Task<BookResponseDto?> CreateBook(CreateBookDto dto)
     {
-        if (!IsValidBook(dto.Title, dto.Isbn, dto.Price, dto.Stock, dto.AuthorId, dto.CategoryId, out _))
+        if (!IsValidBook(dto.Title, dto.Isbn, dto.Price, dto.Stock, dto.AuthorId, dto.CategoryId, excludeBookId: null, out _))
         {
             return Task.FromResult<BookResponseDto?>(null);
         }
@@ -134,12 +135,7 @@ public class BookStoreService : IBookStoreService
             return Task.FromResult<BookResponseDto?>(null);
         }
 
-        if (_books.Any(b => b.Id != id && b.Isbn.Equals(dto.Isbn, StringComparison.OrdinalIgnoreCase)))
-        {
-            return Task.FromResult<BookResponseDto?>(null);
-        }
-
-        if (!IsValidBook(dto.Title, dto.Isbn, dto.Price, dto.Stock, dto.AuthorId, dto.CategoryId, out _))
+        if (!IsValidBook(dto.Title, dto.Isbn, dto.Price, dto.Stock, dto.AuthorId, dto.CategoryId, excludeBookId: id, out _))
         {
             return Task.FromResult<BookResponseDto?>(null);
         }
@@ -178,7 +174,7 @@ public class BookStoreService : IBookStoreService
         });
     }
 
-    private bool IsValidBook(string title, string isbn, decimal price, int stock, int authorId, int categoryId, out string? error)
+    private bool IsValidBook(string title, string isbn, decimal price, int stock, int authorId, int categoryId, int? excludeBookId, out string? error)
     {
         error = null;
         if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(isbn) || price <= 0 || stock < 0)
@@ -193,7 +189,9 @@ public class BookStoreService : IBookStoreService
             return false;
         }
 
-        if (_books.Any(b => b.Isbn.Equals(isbn, StringComparison.OrdinalIgnoreCase)))
+        if (_books.Any(b =>
+                b.Id != excludeBookId &&
+                b.Isbn.Equals(isbn, StringComparison.OrdinalIgnoreCase)))
         {
             error = "ISBN must be unique.";
             return false;

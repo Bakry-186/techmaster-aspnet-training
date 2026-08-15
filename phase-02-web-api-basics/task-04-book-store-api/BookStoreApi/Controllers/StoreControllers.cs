@@ -29,12 +29,15 @@ public class AuthorsController(IBookStoreService bookStoreService) : ControllerB
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
-        if (!await bookStoreService.DeleteAuthor(id))
-        {
-            return BadRequest(Error("Invalid request", "BAD_REQUEST", "Author not found or has related books."));
-        }
+        var (success, errorCode) = await bookStoreService.DeleteAuthor(id);
+        if (success) return NoContent();
 
-        return NoContent();
+        return errorCode switch
+        {
+            "NOT_FOUND" => NotFound(Error("Resource not found", "NOT_FOUND", $"Author with id {id} was not found.")),
+            "CONFLICT" => Conflict(Error("Conflict", "CONFLICT", "Author cannot be deleted because related books exist.")),
+            _ => BadRequest(Error("Invalid request", "BAD_REQUEST", "Unable to delete author."))
+        };
     }
 
     private static ApiErrorResponse Error(string message, string code, params string[] details) =>
@@ -90,9 +93,17 @@ public class BooksController(IBookStoreService bookStoreService) : ControllerBas
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll(string? search, int? authorId, int? categoryId, int pageNumber = 1, int pageSize = 10)
+    public async Task<IActionResult> GetAll(
+        string? search, int? authorId, int? categoryId, bool? isAvailable,
+        int pageNumber = 1, int pageSize = 10)
     {
-        var books = await bookStoreService.GetBooks(search, authorId, categoryId, pageNumber, pageSize);
+        if (pageNumber < 1 || pageSize < 1 || pageSize > 50)
+        {
+            return BadRequest(Error("Invalid request", "BAD_REQUEST",
+                "Page number must be at least 1 and page size must be between 1 and 50."));
+        }
+
+        var books = await bookStoreService.GetBooks(search, authorId, categoryId, isAvailable, pageNumber, pageSize);
         return Ok(books);
     }
 

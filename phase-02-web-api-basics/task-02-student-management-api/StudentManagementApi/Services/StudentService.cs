@@ -51,16 +51,17 @@ public class StudentService : IStudentService
         });
     }
 
-    public Task<Student?> GetStudentById(int id)
+    public Task<StudentResponseDto?> GetStudentById(int id)
     {
-        return Task.FromResult(_students.FirstOrDefault(s => s.Id == id));
+        var student = _students.FirstOrDefault(s => s.Id == id);
+        return Task.FromResult(student is null ? null : MapToResponse(student));
     }
 
-    public Task<Student?> CreateStudent(CreateStudentDto createStudentDto)
+    public Task<StudentResponseDto?> CreateStudent(CreateStudentDto createStudentDto)
     {
         if (EmailExists(createStudentDto.Email))
         {
-            return Task.FromResult<Student?>(null);
+            return Task.FromResult<StudentResponseDto?>(null);
         }
 
         var student = new Student
@@ -77,27 +78,27 @@ public class StudentService : IStudentService
         };
 
         _students.Add(student);
-        return Task.FromResult<Student?>(student);
+        return Task.FromResult<StudentResponseDto?>(MapToResponse(student));
     }
 
-    public Task<Student?> UpdateStudent(int id, UpdateStudentDto updateStudentDto)
+    public Task<StudentResponseDto?> UpdateStudent(int id, UpdateStudentDto updateStudentDto)
     {
         var student = _students.FirstOrDefault(s => s.Id == id);
         if (student == null)
         {
-            return Task.FromResult<Student?>(null);
+            return Task.FromResult<StudentResponseDto?>(null);
         }
 
         if (EmailExists(updateStudentDto.Email, id))
         {
-            return Task.FromResult<Student?>(null);
+            return Task.FromResult<StudentResponseDto?>(null);
         }
 
         student.Name = updateStudentDto.Name;
         student.Email = updateStudentDto.Email;
         student.Phone = updateStudentDto.Phone;
         student.TrackName = updateStudentDto.TrackName;
-        return Task.FromResult<Student?>(student);
+        return Task.FromResult<StudentResponseDto?>(MapToResponse(student));
     }
 
     public Task<bool> DeleteStudent(int id)

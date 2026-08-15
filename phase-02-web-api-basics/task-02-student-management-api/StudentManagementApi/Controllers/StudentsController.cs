@@ -18,9 +18,10 @@ public class StudentsController(IStudentService studentService) : ControllerBase
     [HttpGet("by-track/{trackName}")]
     public async Task<IActionResult> GetStudentsByTrack(string trackName, int pageNumber = 1, int pageSize = 10)
     {
-        if (pageNumber < 1 || pageSize < 1)
+        if (pageNumber < 1 || pageSize < 1 || pageSize > 50)
         {
-            return BadRequest(Error("Invalid request", "BAD_REQUEST", "Page number and page size must be greater than 0."));
+            return BadRequest(Error("Invalid request", "BAD_REQUEST",
+                "Page number must be at least 1 and page size must be between 1 and 50."));
         }
 
         var students = await studentService.GetStudentsByTrackName(trackName, pageNumber, pageSize);
@@ -47,9 +48,10 @@ public class StudentsController(IStudentService studentService) : ControllerBase
         int pageNumber = 1,
         int pageSize = 10)
     {
-        if (pageNumber < 1 || pageSize < 1)
+        if (pageNumber < 1 || pageSize < 1 || pageSize > 50)
         {
-            return BadRequest(Error("Invalid request", "BAD_REQUEST", "Page number and page size must be greater than 0."));
+            return BadRequest(Error("Invalid request", "BAD_REQUEST",
+                "Page number must be at least 1 and page size must be between 1 and 50."));
         }
 
         var students = await studentService.GetAllStudents(search, trackName, isActive, pageNumber, pageSize);
@@ -62,7 +64,7 @@ public class StudentsController(IStudentService studentService) : ControllerBase
         var student = await studentService.CreateStudent(createStudentDto);
         if (student == null)
         {
-            return BadRequest(Error("Invalid request", "BAD_REQUEST", "Email must be unique."));
+            return Conflict(Error("Conflict", "CONFLICT", "Email must be unique."));
         }
 
         return CreatedAtAction(nameof(GetStudentById), new { id = student.Id }, student);
@@ -80,7 +82,7 @@ public class StudentsController(IStudentService studentService) : ControllerBase
         var student = await studentService.UpdateStudent(id, updateStudentDto);
         if (student == null)
         {
-            return BadRequest(Error("Invalid request", "BAD_REQUEST", "Email must be unique."));
+            return Conflict(Error("Conflict", "CONFLICT", "Email must be unique."));
         }
 
         return Ok(student);
