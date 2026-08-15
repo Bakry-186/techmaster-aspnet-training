@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using TrainingCenter.Api.Data;
 using TrainingCenter.Api.DTOs;
@@ -7,9 +8,15 @@ namespace TrainingCenter.Api.Services;
 
 public class EnrollmentService(AppDbContext context)
 {
-    public async Task<IReadOnlyList<EnrollmentListItemResponse>> GetAllAsync(
+    public async Task<(IReadOnlyList<EnrollmentListItemResponse>? Data, string? Error)> GetAllAsync(
         string? status, int? trackId, int? studentId, string? paymentStatus)
     {
+        var statusError = FilterValidation.ValidateEnrollmentStatusFilter(status);
+        if (statusError is not null) return (null, statusError);
+
+        var paymentFilterError = FilterValidation.ValidatePaymentSummaryFilter(paymentStatus);
+        if (paymentFilterError is not null) return (null, paymentFilterError);
+
         var query = context.Enrollments.AsNoTracking()
             .Include(e => e.Student)
             .Include(e => e.TrainingTrack)
@@ -23,11 +30,11 @@ public class EnrollmentService(AppDbContext context)
 
         var list = await query.OrderByDescending(e => e.EnrollmentDate).ToListAsync();
 
-        return list.Select(e =>
+        var data = list.Select(e =>
         {
             var totalPaid = EnrollmentHelper.GetTotalPaid(e);
             var totalRequired = e.TrainingTrack.Fee;
-            var item = new EnrollmentListItemResponse
+            return new EnrollmentListItemResponse
             {
                 EnrollmentId = e.EnrollmentId,
                 StudentName = e.Student.FullName,
@@ -37,7 +44,6 @@ public class EnrollmentService(AppDbContext context)
                 TotalPaid = totalPaid,
                 TotalRequired = totalRequired
             };
-            return item;
         }).Where(e =>
         {
             if (string.IsNullOrWhiteSpace(paymentStatus)) return true;
@@ -50,6 +56,8 @@ public class EnrollmentService(AppDbContext context)
                 _ => true
             };
         }).ToList();
+
+        return (data, null);
     }
 
     public async Task<EnrollmentDetailsResponse?> GetByIdAsync(int id)
@@ -66,38 +74,56 @@ public class EnrollmentService(AppDbContext context)
 
     public async Task<(EnrollmentDetailsResponse? Data, string? Error)> CreateAsync(CreateEnrollmentRequest request)
     {
+        var validationError = await ValidateEnrollmentCreateAsync(request);
+        if (validationError is not null) return (null, validationError);
+
+        try
+        {
+            var enrollment = new Enrollment
+            {
+                StudentId = request.StudentId,
+                TrainingTrackId = request.TrainingTrackId,
+                EnrollmentDate = DateTime.UtcNow,
+                Status = EnrollmentStatus.Pending,
+                ProgressPercentage = 0,
+                CreatedAt = DateTime.UtcNow
+            };
+            context.Enrollments.Add(enrollment);
+            await context.SaveChangesAsync();
+            return (await GetByIdAsync(enrollment.EnrollmentId), null);
+        }
+        catch (DbUpdateException)
+        {
+            return (null, "Duplicate active enrollment is not allowed.");
+        }
+    }
+
+    private async Task<string?> ValidateEnrollmentCreateAsync(CreateEnrollmentRequest request)
+    {
         var student = await context.Students.FirstOrDefaultAsync(s =>
             s.StudentId == request.StudentId && !s.IsDeleted && s.IsActive);
-        if (student is null) return (null, "Student not found or inactive.");
+        if (student is null) return "Student not found or inactive.";
 
         var track = await context.TrainingTracks
-            .Include(t => t.Enrollments)
+            .AsNoTracking()
             .FirstOrDefaultAsync(t => t.TrainingTrackId == request.TrainingTrackId && !t.IsDeleted);
-        if (track is null) return (null, "Track not found.");
-        if (track.Status == TrackStatus.Closed) return (null, "Closed track cannot accept new enrollments.");
+        if (track is null) return "Track not found.";
+        if (track.Status is TrackStatus.Closed or TrackStatus.Completed)
+            return "Track is not open for new enrollments.";
 
         if (await context.Enrollments.AnyAsync(e =>
                 e.StudentId == request.StudentId &&
                 e.TrainingTrackId == request.TrainingTrackId &&
-                EnrollmentHelper.IsActiveEnrollment(e.Status)))
-            return (null, "Duplicate active enrollment is not allowed.");
+                (e.Status == EnrollmentStatus.Pending || e.Status == EnrollmentStatus.Active)))
+            return "Duplicate active enrollment is not allowed.";
 
-        var activeCount = EnrollmentHelper.CountActiveEnrollments(track);
+        var activeCount = await context.Enrollments.CountAsync(e =>
+            e.TrainingTrackId == request.TrainingTrackId &&
+            (e.Status == EnrollmentStatus.Pending || e.Status == EnrollmentStatus.Active));
         if (activeCount >= track.Capacity)
-            return (null, "Track capacity exceeded.");
+            return "Track capacity exceeded.";
 
-        var enrollment = new Enrollment
-        {
-            StudentId = request.StudentId,
-            TrainingTrackId = request.TrainingTrackId,
-            EnrollmentDate = DateTime.UtcNow,
-            Status = EnrollmentStatus.Pending,
-            ProgressPercentage = 0,
-            CreatedAt = DateTime.UtcNow
-        };
-        context.Enrollments.Add(enrollment);
-        await context.SaveChangesAsync();
-        return (await GetByIdAsync(enrollment.EnrollmentId), null);
+        return null;
     }
 
     public async Task<(EnrollmentDetailsResponse? Data, string? Error)> UpdateStatusAsync(
@@ -133,7 +159,8 @@ public class EnrollmentService(AppDbContext context)
         if (!await context.Students.AnyAsync(s => s.StudentId == studentId && !s.IsDeleted))
             return [];
 
-        return await GetAllAsync(null, null, studentId, null);
+        var (data, _) = await GetAllAsync(null, null, studentId, null);
+        return data ?? [];
     }
 
     public async Task<IReadOnlyList<TrackStudentResponse>> GetStudentsByTrackAsync(int trackId)

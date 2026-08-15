@@ -102,6 +102,7 @@ public class StudentService(AppDbContext context)
         var student = await context.Students.FirstOrDefaultAsync(s => s.StudentId == id && !s.IsDeleted);
         if (student is null) return (false, "Student not found.");
         student.IsDeleted = true;
+        student.IsActive = false;
         student.DeletedAt = DateTime.UtcNow;
         student.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync();

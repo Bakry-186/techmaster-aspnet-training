@@ -13,8 +13,10 @@ public class EnrollmentsController(EnrollmentService service) : ControllerBase
     public async Task<IActionResult> GetEnrollments(
         string? status, int? trackId, int? studentId, string? paymentStatus)
     {
-        var data = await service.GetAllAsync(status, trackId, studentId, paymentStatus);
-        return Ok(ApiResponse<IReadOnlyList<EnrollmentListItemResponse>>.Ok(data));
+        var (data, error) = await service.GetAllAsync(status, trackId, studentId, paymentStatus);
+        return error is not null
+            ? BadRequest(ApiResponse<object>.Fail(error))
+            : Ok(ApiResponse<IReadOnlyList<EnrollmentListItemResponse>>.Ok(data!));
     }
 
     [HttpGet("{id:int}")]

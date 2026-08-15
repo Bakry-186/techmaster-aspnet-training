@@ -34,10 +34,13 @@ public class StudentsController(StudentService service) : ControllerBase
     public async Task<IActionResult> CreateStudent(CreateStudentRequest request)
     {
         var (data, error) = await service.CreateAsync(request);
-        return error is not null
-            ? BadRequest(ApiResponse<object>.Fail(error))
-            : CreatedAtAction(nameof(GetStudent), new { id = data!.StudentId },
-                ApiResponse<StudentDetailsResponse>.Ok(data!, "Student created successfully."));
+        return error switch
+        {
+            "Email must be unique." => Conflict(ApiResponse<object>.Fail(error)),
+            not null => BadRequest(ApiResponse<object>.Fail(error)),
+            _ => CreatedAtAction(nameof(GetStudent), new { id = data!.StudentId },
+                ApiResponse<StudentDetailsResponse>.Ok(data!, "Student created successfully."))
+        };
     }
 
     [HttpPut("{id:int}")]
@@ -45,9 +48,12 @@ public class StudentsController(StudentService service) : ControllerBase
     {
         var (data, error) = await service.UpdateAsync(id, request);
         if (error == "Student not found.") return NotFound(ApiResponse<object>.Fail(error));
-        return error is not null
-            ? BadRequest(ApiResponse<object>.Fail(error))
-            : Ok(ApiResponse<StudentDetailsResponse>.Ok(data!, "Student updated successfully."));
+        return error switch
+        {
+            "Email must be unique." => Conflict(ApiResponse<object>.Fail(error)),
+            not null => BadRequest(ApiResponse<object>.Fail(error)),
+            _ => Ok(ApiResponse<StudentDetailsResponse>.Ok(data!, "Student updated successfully."))
+        };
     }
 
     [HttpDelete("{id:int}")]

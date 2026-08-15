@@ -7,9 +7,12 @@ namespace TrainingCenter.Api.Services;
 
 public class TrackService(AppDbContext context)
 {
-    public async Task<IReadOnlyList<TrackListItemResponse>> GetAllAsync(
+    public async Task<(IReadOnlyList<TrackListItemResponse>? Data, string? Error)> GetAllAsync(
         string? keyword, string? level, string? status, int? instructorId)
     {
+        var filterError = FilterValidation.ValidateTrackFilters(level, status);
+        if (filterError is not null) return (null, filterError);
+
         var query = context.TrainingTracks.AsNoTracking()
             .Where(t => !t.IsDeleted);
 
@@ -28,7 +31,7 @@ public class TrackService(AppDbContext context)
         if (instructorId.HasValue)
             query = query.Where(t => t.InstructorId == instructorId.Value);
 
-        return await query.OrderBy(t => t.TrainingTrackId)
+        return (await query.OrderBy(t => t.TrainingTrackId)
             .Select(t => new TrackListItemResponse
             {
                 TrainingTrackId = t.TrainingTrackId,
@@ -38,7 +41,7 @@ public class TrackService(AppDbContext context)
                 Status = t.Status.ToString(),
                 Capacity = t.Capacity,
                 InstructorName = t.Instructor.FullName
-            }).ToListAsync();
+            }).ToListAsync(), null);
     }
 
     public async Task<TrackDetailsResponse?> GetByIdAsync(int id)
@@ -71,7 +74,7 @@ public class TrackService(AppDbContext context)
     public async Task<(TrackDetailsResponse? Data, string? Error)> CreateAsync(CreateTrackRequest request)
     {
         var error = await ValidateTrackAsync(request.Title, request.Code, request.Level,
-            request.Capacity, request.StartDate, request.EndDate, request.InstructorId, null);
+            request.Capacity, request.Fee, request.StartDate, request.EndDate, request.InstructorId, null);
         if (error is not null) return (null, error);
 
         var track = new TrainingTrack
@@ -99,7 +102,7 @@ public class TrackService(AppDbContext context)
         if (track is null) return (null, "Track not found.");
 
         var error = await ValidateTrackAsync(request.Title, request.Code, request.Level,
-            request.Capacity, request.StartDate, request.EndDate, request.InstructorId, id);
+            request.Capacity, request.Fee, request.StartDate, request.EndDate, request.InstructorId, id);
         if (error is not null) return (null, error);
         if (!Enum.TryParse<TrackStatus>(request.Status, true, out var status))
             return (null, "Invalid track status.");
@@ -134,10 +137,11 @@ public class TrackService(AppDbContext context)
     }
 
     private async Task<string?> ValidateTrackAsync(
-        string title, string code, string level, int capacity,
+        string title, string code, string level, int capacity, decimal fee,
         DateTime startDate, DateTime endDate, int instructorId, int? excludeId)
     {
         if (string.IsNullOrWhiteSpace(title)) return "Title is required.";
+        if (fee <= 0) return "Fee must be greater than 0.";
         if (capacity <= 0) return "Capacity must be greater than 0.";
         if (startDate >= endDate) return "StartDate must be before EndDate.";
         if (!await context.Instructors.AnyAsync(i => i.InstructorId == instructorId))

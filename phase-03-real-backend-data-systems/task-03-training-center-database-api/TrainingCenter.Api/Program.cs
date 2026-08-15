@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TrainingCenter.Api.Data;
+using TrainingCenter.Api.Middleware;
 using TrainingCenter.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,9 +19,12 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
+if (!app.Environment.IsEnvironment("Testing"))
 {
-    await DbSeeder.SeedAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>());
+    using (var scope = app.Services.CreateScope())
+    {
+        await DbSeeder.SeedAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>());
+    }
 }
 
 if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
@@ -29,6 +33,9 @@ if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
     app.UseSwaggerUI();
 }
 
+app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseHttpsRedirection();
 app.MapControllers();
 app.Run();
+
+public partial class Program { }

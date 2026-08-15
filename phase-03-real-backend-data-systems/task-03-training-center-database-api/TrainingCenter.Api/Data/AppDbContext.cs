@@ -16,7 +16,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<Student>(entity =>
         {
             entity.HasKey(s => s.StudentId);
-            entity.HasIndex(s => s.Email).IsUnique();
+            entity.HasIndex(s => s.Email)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
         });
 
         modelBuilder.Entity<Instructor>(entity =>
@@ -28,7 +30,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<TrainingTrack>(entity =>
         {
             entity.HasKey(t => t.TrainingTrackId);
-            entity.HasIndex(t => t.Code).IsUnique();
+            entity.HasIndex(t => t.Code)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
             entity.Property(t => t.Fee).HasPrecision(18, 2);
             entity.HasOne(t => t.Instructor)
                 .WithMany(i => i.Tracks)
@@ -39,6 +43,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<Enrollment>(entity =>
         {
             entity.HasKey(e => e.EnrollmentId);
+            entity.HasIndex(e => new { e.StudentId, e.TrainingTrackId })
+                .IsUnique()
+                .HasFilter("[Status] IN (0, 1)");
             entity.Property(e => e.ProgressPercentage).HasPrecision(5, 2);
             entity.HasOne(e => e.Student)
                 .WithMany(s => s.Enrollments)

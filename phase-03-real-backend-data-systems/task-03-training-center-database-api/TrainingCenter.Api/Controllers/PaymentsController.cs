@@ -14,8 +14,10 @@ public class PaymentsController(PaymentService service) : ControllerBase
     {
         if (from.HasValue && to.HasValue && from > to)
             return BadRequest(ApiResponse<object>.Fail("from must be less than or equal to to."));
-        var data = await service.GetAllAsync(from, to, status);
-        return Ok(ApiResponse<IReadOnlyList<PaymentResponse>>.Ok(data));
+        var (data, error) = await service.GetAllAsync(from, to, status);
+        return error is not null
+            ? BadRequest(ApiResponse<object>.Fail(error))
+            : Ok(ApiResponse<IReadOnlyList<PaymentResponse>>.Ok(data!));
     }
 
     [HttpPost]
@@ -24,7 +26,8 @@ public class PaymentsController(PaymentService service) : ControllerBase
         var (data, error) = await service.CreateAsync(request);
         return error is not null
             ? BadRequest(ApiResponse<object>.Fail(error))
-            : Ok(ApiResponse<PaymentResponse>.Ok(data!, "Payment created successfully."));
+            : Created($"/api/payments/{data!.PaymentId}",
+                ApiResponse<PaymentResponse>.Ok(data!, "Payment created successfully."));
     }
 
     [HttpPut("{id:int}/status")]

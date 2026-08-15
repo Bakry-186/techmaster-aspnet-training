@@ -13,8 +13,10 @@ public class TracksController(TrackService service, EnrollmentService enrollment
     public async Task<IActionResult> GetTracks(
         string? keyword, string? level, string? status, int? instructorId)
     {
-        var data = await service.GetAllAsync(keyword, level, status, instructorId);
-        return Ok(ApiResponse<IReadOnlyList<TrackListItemResponse>>.Ok(data));
+        var (data, error) = await service.GetAllAsync(keyword, level, status, instructorId);
+        return error is not null
+            ? BadRequest(ApiResponse<object>.Fail(error))
+            : Ok(ApiResponse<IReadOnlyList<TrackListItemResponse>>.Ok(data!));
     }
 
     [HttpGet("{id:int}")]
@@ -50,7 +52,13 @@ public class TracksController(TrackService service, EnrollmentService enrollment
     public async Task<IActionResult> DeleteTrack(int id)
     {
         var (success, error) = await service.SoftDeleteAsync(id);
-        return success ? NoContent() : BadRequest(ApiResponse<object>.Fail(error!));
+        if (success) return NoContent();
+        return error switch
+        {
+            "Track not found." => NotFound(ApiResponse<object>.Fail(error)),
+            "Cannot delete track with active enrollments." => Conflict(ApiResponse<object>.Fail(error)),
+            _ => BadRequest(ApiResponse<object>.Fail(error!))
+        };
     }
 
     [HttpGet("{id:int}/students")]

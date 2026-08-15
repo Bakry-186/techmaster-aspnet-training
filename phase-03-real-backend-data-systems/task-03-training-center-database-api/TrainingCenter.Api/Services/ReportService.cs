@@ -17,12 +17,14 @@ public class ReportService(AppDbContext context)
             .Where(p => p.PaymentStatus == PaymentStatus.Paid)
             .SumAsync(p => p.Amount);
 
-        var enrollments = await context.Enrollments
-            .Include(e => e.Payments)
-            .Include(e => e.TrainingTrack)
+        var unpaid = await context.Enrollments.AsNoTracking()
             .Where(e => e.Status != EnrollmentStatus.Cancelled)
-            .ToListAsync();
-        var unpaid = enrollments.Count(e => EnrollmentHelper.GetRemaining(e) > 0);
+            .Select(e => new
+            {
+                Required = e.TrainingTrack.Fee,
+                Paid = e.Payments.Where(p => p.PaymentStatus == PaymentStatus.Paid).Sum(p => p.Amount)
+            })
+            .CountAsync(x => x.Required - x.Paid > 0);
 
         return new DashboardSummaryResponse
         {
@@ -34,72 +36,64 @@ public class ReportService(AppDbContext context)
         };
     }
 
-    public async Task<IReadOnlyList<UnpaidEnrollmentResponse>> GetUnpaidEnrollmentsAsync()
-    {
-        var enrollments = await context.Enrollments.AsNoTracking()
-            .Include(e => e.Student)
-            .Include(e => e.TrainingTrack)
-            .Include(e => e.Payments)
+    public async Task<IReadOnlyList<UnpaidEnrollmentResponse>> GetUnpaidEnrollmentsAsync() =>
+        await context.Enrollments.AsNoTracking()
             .Where(e => e.Status != EnrollmentStatus.Cancelled)
-            .ToListAsync();
-
-        return enrollments
-            .Select(e =>
+            .Select(e => new
             {
-                var paid = EnrollmentHelper.GetTotalPaid(e);
-                var required = e.TrainingTrack.Fee;
-                return new { e, paid, required, remaining = required - paid };
+                e.EnrollmentId,
+                StudentName = e.Student.FullName,
+                TrackTitle = e.TrainingTrack.Title,
+                TotalRequired = e.TrainingTrack.Fee,
+                TotalPaid = e.Payments
+                    .Where(p => p.PaymentStatus == PaymentStatus.Paid)
+                    .Sum(p => p.Amount)
             })
-            .Where(x => x.remaining > 0)
+            .Where(x => x.TotalRequired - x.TotalPaid > 0)
             .Select(x => new UnpaidEnrollmentResponse
             {
-                EnrollmentId = x.e.EnrollmentId,
-                StudentName = x.e.Student.FullName,
-                TrackTitle = x.e.TrainingTrack.Title,
-                TotalRequired = x.required,
-                TotalPaid = x.paid,
-                RemainingAmount = x.remaining
-            }).ToList();
-    }
-
-    public async Task<IReadOnlyList<TrackCapacityResponse>> GetTrackCapacityAsync()
-    {
-        var tracks = await context.TrainingTracks.AsNoTracking()
-            .Include(t => t.Enrollments)
-            .Where(t => !t.IsDeleted)
+                EnrollmentId = x.EnrollmentId,
+                StudentName = x.StudentName,
+                TrackTitle = x.TrackTitle,
+                TotalRequired = x.TotalRequired,
+                TotalPaid = x.TotalPaid,
+                RemainingAmount = x.TotalRequired - x.TotalPaid
+            })
             .ToListAsync();
 
-        return tracks.Select(t =>
-        {
-            var active = EnrollmentHelper.CountActiveEnrollments(t);
-            return new TrackCapacityResponse
+    public async Task<IReadOnlyList<TrackCapacityResponse>> GetTrackCapacityAsync() =>
+        await context.TrainingTracks.AsNoTracking()
+            .Where(t => !t.IsDeleted)
+            .Select(t => new TrackCapacityResponse
             {
                 TrainingTrackId = t.TrainingTrackId,
                 Title = t.Title,
                 Capacity = t.Capacity,
-                ActiveEnrollments = active,
-                RemainingSeats = Math.Max(0, t.Capacity - active)
-            };
-        }).ToList();
-    }
+                ActiveEnrollments = t.Enrollments.Count(e =>
+                    e.Status == EnrollmentStatus.Pending || e.Status == EnrollmentStatus.Active),
+                RemainingSeats = t.Capacity - t.Enrollments.Count(e =>
+                    e.Status == EnrollmentStatus.Pending || e.Status == EnrollmentStatus.Active)
+            })
+            .ToListAsync();
 
     public async Task<RevenueSummaryResponse> GetRevenueSummaryAsync()
     {
-        var payments = await context.Payments.AsNoTracking().ToListAsync();
-        return new RevenueSummaryResponse
-        {
-            TotalRevenue = payments.Where(p => p.PaymentStatus == PaymentStatus.Paid).Sum(p => p.Amount),
-            PaidCount = payments.Count(p => p.PaymentStatus == PaymentStatus.Paid),
-            PendingCount = payments.Count(p => p.PaymentStatus == PaymentStatus.Pending),
-            FailedCount = payments.Count(p => p.PaymentStatus == PaymentStatus.Failed)
-        };
+        var grouped = await context.Payments.AsNoTracking()
+            .GroupBy(_ => 1)
+            .Select(g => new RevenueSummaryResponse
+            {
+                TotalRevenue = g.Where(p => p.PaymentStatus == PaymentStatus.Paid).Sum(p => p.Amount),
+                PaidCount = g.Count(p => p.PaymentStatus == PaymentStatus.Paid),
+                PendingCount = g.Count(p => p.PaymentStatus == PaymentStatus.Pending),
+                FailedCount = g.Count(p => p.PaymentStatus == PaymentStatus.Failed)
+            })
+            .FirstOrDefaultAsync();
+
+        return grouped ?? new RevenueSummaryResponse();
     }
 
-    public async Task<IReadOnlyList<RevenueByTrackResponse>> GetRevenueByTrackAsync()
-    {
-        return await context.Enrollments.AsNoTracking()
-            .Include(e => e.TrainingTrack)
-            .Include(e => e.Payments)
+    public async Task<IReadOnlyList<RevenueByTrackResponse>> GetRevenueByTrackAsync() =>
+        await context.Enrollments.AsNoTracking()
             .GroupBy(e => new { e.TrainingTrackId, e.TrainingTrack.Title })
             .Select(g => new RevenueByTrackResponse
             {
@@ -110,7 +104,6 @@ public class ReportService(AppDbContext context)
                     .Sum(p => p.Amount),
                 EnrollmentCount = g.Count()
             }).ToListAsync();
-    }
 
     public async Task<IReadOnlyList<TrackCapacityResponse>> GetTracksWithAvailableSeatsAsync()
     {
@@ -118,28 +111,22 @@ public class ReportService(AppDbContext context)
         return all.Where(t => t.RemainingSeats > 0).ToList();
     }
 
-    public async Task<IReadOnlyList<TopTrackResponse>> GetTopTracksAsync(int top = 5)
-    {
-        var tracks = await context.TrainingTracks.AsNoTracking()
-            .Include(t => t.Enrollments)
+    public async Task<IReadOnlyList<TopTrackResponse>> GetTopTracksAsync(int top = 5) =>
+        await context.TrainingTracks.AsNoTracking()
             .Where(t => !t.IsDeleted)
-            .ToListAsync();
-
-        return tracks
             .Select(t => new TopTrackResponse
             {
                 TrainingTrackId = t.TrainingTrackId,
                 Title = t.Title,
-                ActiveEnrollmentCount = EnrollmentHelper.CountActiveEnrollments(t)
+                ActiveEnrollmentCount = t.Enrollments.Count(e =>
+                    e.Status == EnrollmentStatus.Pending || e.Status == EnrollmentStatus.Active)
             })
             .OrderByDescending(t => t.ActiveEnrollmentCount)
             .Take(top)
-            .ToList();
-    }
+            .ToListAsync();
 
-    public async Task<IReadOnlyList<InstructorWorkloadResponse>> GetInstructorWorkloadAsync()
-    {
-        return await context.Instructors.AsNoTracking()
+    public async Task<IReadOnlyList<InstructorWorkloadResponse>> GetInstructorWorkloadAsync() =>
+        await context.Instructors.AsNoTracking()
             .Select(i => new InstructorWorkloadResponse
             {
                 InstructorId = i.InstructorId,
@@ -150,18 +137,10 @@ public class ReportService(AppDbContext context)
                     .SelectMany(t => t.Enrollments)
                     .Count(e => e.Status == EnrollmentStatus.Active || e.Status == EnrollmentStatus.Pending)
             }).ToListAsync();
-    }
 
-    public async Task<IReadOnlyList<UnpaidEnrollmentResponse>> GetStudentsWithoutPaymentsAsync()
-    {
-        var enrollments = await context.Enrollments.AsNoTracking()
-            .Include(e => e.Student)
-            .Include(e => e.TrainingTrack)
-            .Include(e => e.Payments)
+    public async Task<IReadOnlyList<UnpaidEnrollmentResponse>> GetStudentsWithoutPaymentsAsync() =>
+        await context.Enrollments.AsNoTracking()
             .Where(e => e.Status == EnrollmentStatus.Pending || e.Status == EnrollmentStatus.Active)
-            .ToListAsync();
-
-        return enrollments
             .Where(e => !e.Payments.Any(p => p.PaymentStatus == PaymentStatus.Paid))
             .Select(e => new UnpaidEnrollmentResponse
             {
@@ -171,6 +150,5 @@ public class ReportService(AppDbContext context)
                 TotalRequired = e.TrainingTrack.Fee,
                 TotalPaid = 0,
                 RemainingAmount = e.TrainingTrack.Fee
-            }).ToList();
-    }
+            }).ToListAsync();
 }

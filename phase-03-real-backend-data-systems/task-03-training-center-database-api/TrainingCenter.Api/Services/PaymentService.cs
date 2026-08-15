@@ -7,16 +7,19 @@ namespace TrainingCenter.Api.Services;
 
 public class PaymentService(AppDbContext context)
 {
-    public async Task<IReadOnlyList<PaymentResponse>> GetAllAsync(
+    public async Task<(IReadOnlyList<PaymentResponse>? Data, string? Error)> GetAllAsync(
         DateTime? from, DateTime? to, string? status)
     {
+        var filterError = FilterValidation.ValidatePaymentStatusFilter(status);
+        if (filterError is not null) return (null, filterError);
+
         var query = context.Payments.AsNoTracking().AsQueryable();
         if (from.HasValue) query = query.Where(p => p.PaymentDate >= from.Value);
         if (to.HasValue) query = query.Where(p => p.PaymentDate <= to.Value);
         if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<PaymentStatus>(status, true, out var st))
             query = query.Where(p => p.PaymentStatus == st);
 
-        return await query.OrderByDescending(p => p.PaymentDate)
+        var data = await query.OrderByDescending(p => p.PaymentDate)
             .Select(p => new PaymentResponse
             {
                 PaymentId = p.PaymentId,
@@ -28,6 +31,8 @@ public class PaymentService(AppDbContext context)
                 ReferenceNumber = p.ReferenceNumber,
                 Notes = p.Notes
             }).ToListAsync();
+
+        return (data, null);
     }
 
     public async Task<IReadOnlyList<PaymentResponse>> GetByEnrollmentAsync(int enrollmentId) =>
@@ -55,6 +60,8 @@ public class PaymentService(AppDbContext context)
             .Include(e => e.TrainingTrack)
             .FirstOrDefaultAsync(e => e.EnrollmentId == request.EnrollmentId);
         if (enrollment is null) return (null, "Enrollment not found.");
+        if (enrollment.Status is EnrollmentStatus.Cancelled or EnrollmentStatus.Completed)
+            return (null, "Cannot add payment to cancelled or completed enrollment.");
 
         var remaining = EnrollmentHelper.GetRemaining(enrollment);
         if (request.Amount > remaining)
@@ -69,21 +76,43 @@ public class PaymentService(AppDbContext context)
             Amount = request.Amount,
             PaymentMethod = method,
             PaymentDate = DateTime.UtcNow,
-            PaymentStatus = PaymentStatus.Paid,
+            PaymentStatus = PaymentStatus.Pending,
             ReferenceNumber = request.ReferenceNumber,
             Notes = request.Notes
         };
         context.Payments.Add(payment);
-
-        if (enrollment.Status == EnrollmentStatus.Pending)
-        {
-            enrollment.Status = EnrollmentStatus.Active;
-            enrollment.UpdatedAt = DateTime.UtcNow;
-        }
-
         await context.SaveChangesAsync();
-        return (await context.Payments.AsNoTracking()
-            .Where(p => p.PaymentId == payment.PaymentId)
+
+        return (await MapPaymentAsync(payment.PaymentId), null);
+    }
+
+    public async Task<(PaymentResponse? Data, string? Error)> UpdateStatusAsync(
+        int id, UpdatePaymentStatusRequest request)
+    {
+        var payment = await context.Payments
+            .Include(p => p.Enrollment)
+            .ThenInclude(e => e.Payments)
+            .Include(p => p.Enrollment)
+            .ThenInclude(e => e.TrainingTrack)
+            .FirstOrDefaultAsync(p => p.PaymentId == id);
+        if (payment is null) return (null, "Payment not found.");
+        if (!Enum.TryParse<PaymentStatus>(request.Status, true, out var status))
+            return (null, "Invalid payment status.");
+
+        if (!PaymentWorkflow.IsValidTransition(payment.PaymentStatus, status))
+            return (null, "Invalid payment status transition.");
+
+        payment.PaymentStatus = status;
+        if (status == PaymentStatus.Paid)
+            PaymentWorkflow.ApplyEnrollmentEffects(payment.Enrollment);
+        await context.SaveChangesAsync();
+
+        return (await MapPaymentAsync(payment.PaymentId), null);
+    }
+
+    private async Task<PaymentResponse> MapPaymentAsync(int paymentId) =>
+        await context.Payments.AsNoTracking()
+            .Where(p => p.PaymentId == paymentId)
             .Select(p => new PaymentResponse
             {
                 PaymentId = p.PaymentId,
@@ -94,30 +123,5 @@ public class PaymentService(AppDbContext context)
                 PaymentStatus = p.PaymentStatus.ToString(),
                 ReferenceNumber = p.ReferenceNumber,
                 Notes = p.Notes
-            }).FirstAsync(), null);
-    }
-
-    public async Task<(PaymentResponse? Data, string? Error)> UpdateStatusAsync(
-        int id, UpdatePaymentStatusRequest request)
-    {
-        var payment = await context.Payments.FirstOrDefaultAsync(p => p.PaymentId == id);
-        if (payment is null) return (null, "Payment not found.");
-        if (!Enum.TryParse<PaymentStatus>(request.Status, true, out var status))
-            return (null, "Invalid payment status.");
-
-        payment.PaymentStatus = status;
-        await context.SaveChangesAsync();
-
-        return (new PaymentResponse
-        {
-            PaymentId = payment.PaymentId,
-            EnrollmentId = payment.EnrollmentId,
-            Amount = payment.Amount,
-            PaymentMethod = payment.PaymentMethod.ToString(),
-            PaymentDate = payment.PaymentDate,
-            PaymentStatus = payment.PaymentStatus.ToString(),
-            ReferenceNumber = payment.ReferenceNumber,
-            Notes = payment.Notes
-        }, null);
-    }
+            }).FirstAsync();
 }
