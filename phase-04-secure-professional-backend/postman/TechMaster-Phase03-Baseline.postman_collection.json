@@ -1,0 +1,93 @@
+{
+  "info": {
+    "name": "TechMaster Phase03 Training Center",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000" }
+  ],
+  "item": [
+    {
+      "name": "Students",
+      "item": [
+        {
+          "name": "Get Students (paginated)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/students?pageNumber=1&pageSize=10&search=mohamed"
+          }
+        },
+        {
+          "name": "Create Student",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"fullName\":\"Test Student\",\"email\":\"test@example.com\",\"phoneNumber\":\"01099999999\"}"
+            },
+            "url": "{{baseUrl}}/api/students"
+          }
+        },
+        {
+          "name": "Create Student - Duplicate Email (400)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"fullName\":\"Duplicate\",\"email\":\"mohamed@example.com\",\"phoneNumber\":null}"
+            },
+            "url": "{{baseUrl}}/api/students"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Enrollments",
+      "item": [
+        {
+          "name": "Create Enrollment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"studentId\":1,\"trainingTrackId\":2}"
+            },
+            "url": "{{baseUrl}}/api/enrollments"
+          }
+        },
+        {
+          "name": "Duplicate Enrollment (400)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"studentId\":1,\"trainingTrackId\":1}"
+            },
+            "url": "{{baseUrl}}/api/enrollments"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Dashboard Summary",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/reports/dashboard-summary" }
+        },
+        {
+          "name": "Unpaid Enrollments",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/reports/unpaid-enrollments" }
+        },
+        {
+          "name": "Revenue By Track",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/reports/revenue-by-track" }
+        }
+      ]
+    }
+  ]
+}
